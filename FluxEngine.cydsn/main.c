@@ -301,9 +301,12 @@ static void cmd_read(struct read_frame* f)
 {
     SIDE_REG_Write(f->side);
     seek_to(current_track);
+
+    /* Put the sampler in reset, so that it stops filling the FIFO */
+    SAMPLER_CONTROL_Write(1);
+    CyDelay(2);
     
     /* Do slow setup *before* we go into the real-time bit. */
-    
     {
         uint8_t i = CyEnterCriticalSection();
         SAMPLER_FIFO_SET_LEVEL_MID;
@@ -315,13 +318,6 @@ static void cmd_read(struct read_frame* f)
     wait_until_writeable(FLUXENGINE_DATA_IN_EP_NUM);
     init_capture_dma();
 
-    /* Wait for the beginning of a rotation. */
-        
-    index_irq = false;
-    while (!index_irq)
-        ;
-    index_irq = false;
-    
     crunch_state_t cs = {};
     cs.outputptr = usb_buffer;
     cs.outputlen = BUFFER_SIZE;
@@ -333,6 +329,15 @@ static void cmd_read(struct read_frame* f)
     CyDmaChSetInitialTd(dma_channel, td[dma_writing_to_td]);
     CyDmaClearPendingDrq(dma_channel);
     CyDmaChEnable(dma_channel, 1);
+
+    /* Wait for the beginning of a rotation. */
+    index_irq = false;
+    while (!index_irq)
+        ;
+    index_irq = false;
+    
+    /* Start the sampler */
+    SAMPLER_CONTROL_Write(0);
 
     /* Wait for the first DMA transfer to complete, after which we can start the
      * USB transfer. */
@@ -392,7 +397,9 @@ abort:;
     CyDmaChSetRequest(dma_channel, CY_DMA_CPU_TERM_CHAIN);
     while (CyDmaChGetRequest(dma_channel))
         ;
-
+    /* Reset the sampler so it stops producing data */
+    SAMPLER_CONTROL_Write(1);
+    
     donecrunch(&cs);
     wait_until_writeable(FLUXENGINE_DATA_IN_EP_NUM);
     if (!dma_underrun)
