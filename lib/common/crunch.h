@@ -25,7 +25,7 @@ typedef struct crunch_state_t
     uint32_t inputlen;
     uint8_t* outputptr;
     uint32_t outputlen;
-    uint16_t fifo;
+    uint32_t fifo;
     uint8_t fifolen;
 }
 crunch_state_t;

@@ -9,16 +9,8 @@ void crunch(crunch_state_t* state)
         uint8_t data = *state->inputptr++;
         state->inputlen--;
 
-        if (data & 0x80)
-        {
-            state->fifo = (state->fifo << 2) | 2 | (data & 1);
-            state->fifolen += 2;
-        }
-        else
-        {
-            state->fifo = (state->fifo << 8) | data;
-            state->fifolen += 8;
-        }
+        state->fifo = (state->fifo << 8) | data;
+        state->fifolen += 8;
 
         if (state->fifolen >= 8)
         {
@@ -45,31 +37,26 @@ void uncrunch(crunch_state_t* state)
 {
     while (state->inputlen && state->outputlen)
     {
-        if (state->fifolen < 8)
-        {
-            if (state->inputlen)
-            {
-                state->fifo = (state->fifo << 8) | *state->inputptr++;
-                state->inputlen--;
-                state->fifolen += 8;
-            }
-            else
-                state->fifo <<= 8;
-        }
-
-        uint8_t data = state->fifo >> (state->fifolen - 8);
-        if (data & 0x80)
-        {
-            data = ((data >> 6) & 0x01) | 0x80;
-            state->fifolen -= 2;
-        }
-        else
-            state->fifolen -= 8;
-
-        if (data)
-        {
-            *state->outputptr++ = data;
+        /* Drain the FIFO */
+        if (state->fifolen > 0) {
+            uint8_t fifodata = (uint8_t)(state->fifo >> (state->fifolen - 8));
+            *state->outputptr++ = fifodata;
             state->outputlen--;
+            state->fifolen -= 8;
+            continue;
+        }
+        uint8_t data = *state->inputptr++;
+        state->inputlen--;
+
+        state->fifo = (state->fifo << 8) | data & 0x3f;
+        state->fifolen += 8;
+        if (data & 0x40) {
+            state->fifo = (state->fifo << 8) | 0x80;
+            state->fifolen += 8;
+        }
+        if (data & 0x80) {
+            state->fifo = (state->fifo << 8) | 0x81;
+            state->fifolen += 8;
         }
     }
 }
